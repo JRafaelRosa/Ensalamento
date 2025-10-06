@@ -101,7 +101,7 @@ def main():
 
    # processar()
 
-    gerar_pdf()
+    # gerar_pdf()
 
     arquivo = input("Nome arquivo: ").strip()
     if not arquivo:
