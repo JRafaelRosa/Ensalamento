@@ -4,7 +4,6 @@ from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
 import os
 
-# --- Os dicionários de mapeamento e as cores continuam aqui ---
 MAPEAMENTO_AREAS = {
     "EXATAS": "CIÊNCIAS EXATAS E DA TERRA", "BIOLOGICAS": "CIÊNCIAS BIOLÓGICAS",
     "ENGENHARIAS": "ENGENHARIAS", "SOCIAIS": "CIÊNCIAS SOCIAIS APLICADAS",
@@ -68,9 +67,9 @@ def pdf_ensalamento(caminho_completo_do_arquivo_csv):
     codigo_area_correto = nome_area_base[:2].upper()
 
     if "_dia1" in nome_base_arquivo:
-        data_do_evento = "06/11/2025"
+        data_do_evento = "05/11/2025"
     elif "_dia2" in nome_base_arquivo:
-        data_do_evento = "07/11/2025"
+        data_do_evento = "06/11/2025"
     else:
         data_do_evento = ""
 
