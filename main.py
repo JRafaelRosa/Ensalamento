@@ -62,7 +62,7 @@ def menu(nome_base):
             pausar_e_voltar()
 
 def processar():
-    nomes = ["AGRARIAS","BIOLOGICAS","EXATAS", "ENGENHARIAS", "HUMANAS", "LINGUISTICA", "SAUDE", "SOCIAIS"]
+    nomes = ["AGRARIAS"]
 
     for nome_base in nomes:
         print(f"\n\n{'=' * 20} PROCESSANDO ÁREA: {nome_base.upper()} {'=' * 20}")
@@ -99,7 +99,7 @@ def gerar_pdf():
 
 def main():
 
-   # processar()
+    processar()
 
     # gerar_pdf()
 

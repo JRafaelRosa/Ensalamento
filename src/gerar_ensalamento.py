@@ -5,7 +5,7 @@ import os
 
 CONFIG = {
    "ARQUIVO_PIBIC_JR": "public/EAIC_PIBIC_Jr_2025-2026.xlsx",
-   # "CODIGO_AREA": "E",  <- Removido daqui para se tornar dinâmico
+
    "NUM_SALAS": 4,
    "DIAS_EVENTO": 2,
    "SESSOES_POR_DIA": [
@@ -21,7 +21,7 @@ CONFIG = {
 
 
 def carregar_dados(caminho_arquivo):
-   # ... (código da função carregar_dados sem alterações)
+
    try:
        if caminho_arquivo.lower().endswith('.csv'):
            df = pd.read_csv(caminho_arquivo)
@@ -47,7 +47,6 @@ def _gerar_ensalamento_principal(arquivo_entrada):
    if df_trabalhos is None: return
 
 
-   # ... (A lógica de filtro do PIBIC Jr. continua a mesma) ...
    try:
        df_pibic_jr = pd.read_excel(CONFIG["ARQUIVO_PIBIC_JR"])
        coluna_nomes_pibic = 'Aluno'
@@ -70,7 +69,6 @@ def _gerar_ensalamento_principal(arquivo_entrada):
    random.shuffle(trabalhos_para_alocar)
 
 
-   # --- NOVIDADE: O código da área e os nomes das salas são gerados aqui ---
    nome_base = os.path.splitext(os.path.basename(arquivo_entrada))[0]
    codigo_area = nome_base[:2].upper()
 
@@ -88,7 +86,6 @@ def _gerar_ensalamento_principal(arquivo_entrada):
                                "Duracao_Slot": sessao_info['duracao_slot_min'], "Trabalhos": []})
 
 
-   # ... (O restante do código, com a Fase 1 e Fase 2, continua o mesmo) ...
    print("Iniciando Fase 1: Alocação Inicial...")
    orientadores_por_sessao_bloco = {}
    for sessao in sessoes:
