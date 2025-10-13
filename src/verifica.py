@@ -1,85 +1,100 @@
 import pandas as pd
+import os
+from src.sala import carregar_config_geral
+from src.gerar_ensalamento import carregar_dados
 
 
 def verificar_consistencia(df):
-    """
-    Verifica a consistência do ensalamento para duas regras críticas.
-    """
-    print("--- Iniciando verificação de consistência do ensalamento ---")
+    """Verifica a consistência do ensalamento em um DataFrame."""
+    print("\n--- Iniciando verificação de consistência ---")
     erros_encontrados = False
-
-    # (A lógica de verificação continua a mesma, sem alterações)
-    print("- Verificando limite de trabalhos por sessão/sala...")
-    sessoes_salas = df.groupby(['Sessão', 'Sala'])
-    for (nome_sessao, nome_sala), grupo in sessoes_salas:
-        contagem_orientador = grupo['Orientador(a)'].value_counts()
-        orientadores_com_limite = contagem_orientador[contagem_orientador >= 6]
-        if not orientadores_com_limite.empty:
-            for orientador, count in orientadores_com_limite.items():
-                print(
-                    f"[AVISO] O orientador '{orientador}' tem {count} trabalhos na sala '{nome_sala}' durante a sessão '{nome_sessao}'."
-                )
-                erros_encontrados = True
-
-    print("- Verificando conflito de salas para orientadores...")
     sessoes = df['Sessão'].unique()
     for sessao in sessoes:
         df_sessao = df[df['Sessão'] == sessao]
-        contagem_salas_por_orientador = df_sessao.groupby('Orientador(a)')['Sala'].nunique()
-        orientadores_em_conflito = contagem_salas_por_orientador[contagem_salas_por_orientador > 1]
-
+        contagem_salas = df_sessao.groupby('Orientador(a)')['Sala'].nunique()
+        orientadores_em_conflito = contagem_salas[contagem_salas > 1]
         if not orientadores_em_conflito.empty:
+            erros_encontrados = True
             for orientador, count in orientadores_em_conflito.items():
                 salas = df_sessao[df_sessao['Orientador(a)'] == orientador]['Sala'].unique().tolist()
                 print(
-                    f"[ERRO GRAVE] O orientador '{orientador}' está em {count} salas ({', '.join(salas)}) ao mesmo tempo durante a sessão '{sessao}'."
-                )
-                erros_encontrados = True
-
+                    f"  [ERRO GRAVE] O orientador '{orientador}' está em {count} salas ({', '.join(salas)}) ao mesmo tempo durante a '{sessao}'.")
     if not erros_encontrados:
-        print("--- Verificação concluída. Nenhum erro de consistência encontrado. ---")
+        print("--- Verificação de consistência: Nenhum erro encontrado! ---")
     else:
-        print("--- Verificação concluída. Foram encontrados problemas no ensalamento. ---")
-
-
-def formatar_ensalamento_por_sala(df):
-    """
-    Exibe a programação formatada e agrupada por Sessão e Sala.
-    """
-    print("\n" + "=" * 70)
-    print(" VISUALIZAÇÃO DO ENSALAMENTO ".center(70, "="))
-    print("=" * 70 + "\n")
-
-    sessoes_agrupadas = df.groupby(['Sessão', 'Sala'])
-
-    for (nome_sessao, nome_sala), df_grupo in sessoes_agrupadas:
-        print(f"--- SESSÃO: {nome_sessao} | SALA: {nome_sala} ---")
-
-        for _, trabalho in df_grupo.iterrows():
-            horario = trabalho['Horário']
-            aluno = trabalho['Apresentador(a)']
-            orientador = trabalho['Orientador(a)']
-            titulo = trabalho['Título']
-            print(f"  {horario} | {aluno} | {orientador} | {titulo}")
-
-        print()  # Adiciona uma linha em branco para separar
+        print("--- Verificação de consistência: Foram encontrados problemas. ---")
 
 
 def verificar(caminho_completo_arquivo):
-    """
-    Função principal do módulo: carrega, verifica e AGORA TAMBÉM EXIBE.
-    """
+    """Função principal do módulo: carrega um CSV e chama a verificação."""
     try:
         df = pd.read_csv(caminho_completo_arquivo)
-        print(f"Arquivo '{caminho_completo_arquivo}' carregado.")
-
-        # 1. Roda a verificação de consistência (como antes)
+        print(f"Arquivo '{caminho_completo_arquivo}' carregado para verificação.")
         verificar_consistencia(df)
-
-        # 2. Roda a formatação para exibir no terminal (a parte que faltava)
-        formatar_ensalamento_por_sala(df)
-
     except FileNotFoundError:
-        print(f"  [ERRO] Arquivo '{caminho_completo_arquivo}' não foi encontrado.")
+        print(f"  [AVISO] Arquivo '{caminho_completo_arquivo}' não foi encontrado.")
     except Exception as e:
         print(f"  [ERRO] Ocorreu um erro ao processar o arquivo: {e}")
+
+
+# --- FUNÇÃO ATUALIZADA ---
+def verificar_nao_alocados(nome_base):
+    """
+    Compara o arquivo de entrada original com os CSVs de saída para encontrar
+    alunos que não foram alocados, respeitando as regras de filtro.
+    """
+    print("\n--- Verificando Alunos Não Alocados ---")
+
+    # 1. Carrega a lista original de trabalhos
+    df_original = carregar_dados(f"public/{nome_base}.xlsx")
+    if df_original is None:
+        return
+
+    # 2. Carrega as configurações do evento para saber quais filtros aplicar
+    config_evento, _, _, _ = carregar_config_geral()
+    if config_evento is None:
+        print("ERRO: Não foi possível carregar as configurações do evento.")
+        return
+
+    # 3. Aplica os mesmos filtros que o gerador de ensalamento
+    todos_nomes_a_ignorar = set()
+    regras_a_ignorar = config_evento.get("ARQUIVOS_A_IGNORAR", {})
+    # Junta filtros GLOBAIS com os específicos da ÁREA
+    arquivos_filtro = regras_a_ignorar.get("GLOBAL", []) + regras_a_ignorar.get(nome_base.upper(), [])
+
+    for arquivo_filtro in arquivos_filtro:
+        try:
+            df_filtro = pd.read_excel(arquivo_filtro)
+            if 'Aluno' in df_filtro.columns:
+                todos_nomes_a_ignorar.update(df_filtro['Aluno'].tolist())
+        except Exception:
+            # Ignora erros de arquivo de filtro aqui, pois o gerador também avisaria
+            pass
+
+    if todos_nomes_a_ignorar:
+        df_original = df_original[~df_original['Apresentador(a)'].isin(todos_nomes_a_ignorar)]
+
+    lista_original_apresentadores = set(df_original['Apresentador(a)'])
+
+    # 4. Carrega a lista de alunos que foram de fato alocados
+    alunos_alocados = set()
+    for dia in [1, 2]:
+        try:
+            df_dia = pd.read_csv(f"public/csv/{nome_base}_dia{dia}.csv")
+            alunos_alocados.update(df_dia['Apresentador(a)'].tolist())
+        except FileNotFoundError:
+            pass
+
+    # 5. Compara as duas listas e exibe o resultado
+    nao_alocados = lista_original_apresentadores - alunos_alocados
+
+    print(f"Total de trabalhos na lista de entrada (após filtros): {len(lista_original_apresentadores)}")
+    print(f"Total de trabalhos alocados no ensalamento: {len(alunos_alocados)}")
+
+    if nao_alocados:
+        print(f"\nAVISO: {len(nao_alocados)} trabalho(s) que deveriam ser alocados ficaram de fora!")
+        print("Lista de não alocados:")
+        for nome in sorted(list(nao_alocados)):
+            print(f"- {nome}")
+    else:
+        print("\nSucesso! Todos os trabalhos válidos foram alocados.")
