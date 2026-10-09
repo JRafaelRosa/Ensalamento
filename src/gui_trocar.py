@@ -93,6 +93,7 @@ class JanelaTrocar(tk.Toplevel):
         panels_frame = tk.Frame(main_frame)
         panels_frame.pack(fill=tk.BOTH, expand=True)
 
+        # Painel da Esquerda (Resultados da Busca)
         resultados_frame = ttk.LabelFrame(panels_frame, text="2. Resultados da Busca (clique para selecionar)")
         resultados_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
@@ -101,6 +102,7 @@ class JanelaTrocar(tk.Toplevel):
         self.resultados_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.resultados_tree.bind('<<TreeviewSelect>>', self.on_resultado_select)
 
+        # Painel da Direita (Opções para Troca)
         opcoes_frame = ttk.LabelFrame(panels_frame, text="3. Opções Disponíveis para o Trabalho Selecionado")
         opcoes_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0))
 
@@ -132,6 +134,14 @@ class JanelaTrocar(tk.Toplevel):
         tree.column('Sala', width=80, anchor='center')
         tree.column('Horário', width=110, anchor='center')
 
+    def formatar_horario(self, horario_str):
+        h_str = str(horario_str)
+        try:
+            horario_fim = (pd.to_datetime(h_str, format='%H:%M') + pd.Timedelta(minutes=15)).strftime('%H:%M')
+            return f"{h_str}-{horario_fim}"
+        except Exception:
+            return h_str
+
     def executar_busca(self, event=None):
         termo_busca = self.termo_busca_var.get().strip().lower()
         if not termo_busca:
@@ -153,14 +163,7 @@ class JanelaTrocar(tk.Toplevel):
             self.resultados_tree.insert('', tk.END, values=("Nenhum resultado encontrado.", "", "", "", ""))
         else:
             for i, trab in enumerate(self.resultados):
-                horario_str = str(trab.get('Horário', '08:30'))
-                try:
-                    horario_fim = (pd.to_datetime(horario_str, format='%H:%M') + pd.Timedelta(minutes=15)).strftime(
-                        '%H:%M')
-                    horario_formatado = f"{horario_str}-{horario_fim}"
-                except Exception:
-                    horario_formatado = horario_str
-
+                horario_formatado = self.formatar_horario(trab.get('Horário', '08:30'))
                 valores_linha = (
                     trab.get('Apresentador(a)', 'N/A'),
                     trab.get('Orientador(a)', 'N/A'),
@@ -184,7 +187,7 @@ class JanelaTrocar(tk.Toplevel):
         matching_indices = self.df[
             (self.df['Apresentador(a)'] == self.trabalho_original['Apresentador(a)']) &
             (self.df['Título'] == self.trabalho_original['Título'])
-            ].index
+        ].index
 
         if matching_indices.empty:
             return
@@ -200,7 +203,7 @@ class JanelaTrocar(tk.Toplevel):
 
         df_sessao_origem = self.df[(self.df['Bloco_ID'] == bloco_origem) & (self.df['Sala'] == sala_origem)]
 
-        # Busca por opções de TROCA de posição entre dois trabalhos
+        # 1. Busca por opções de TROCA entre dois trabalhos
         for idx_alvo, trabalho_alvo in self.df.iterrows():
             if idx_alvo == self.idx_original:
                 continue
@@ -221,7 +224,7 @@ class JanelaTrocar(tk.Toplevel):
             if mov_A and mov_B:
                 self.opcoes_validas.append({"tipo": "TROCAR", "idx_alvo": idx_alvo, "alvo": trabalho_alvo.to_dict()})
 
-        # Busca por opções de MOVER para sessões que possuem vaga
+        # 2. Busca por opções de MOVER para vaga
         if len(df_sessao_origem) - 1 >= self.min_trabalhos:
             sessoes_com_vagas = self.df.groupby(['Dia', 'Sessão', 'Sala', 'Bloco_ID']).filter(
                 lambda x: len(x) < self.max_trabalhos
@@ -252,21 +255,14 @@ class JanelaTrocar(tk.Toplevel):
                     )
                 else:
                     alvo = opcao['alvo']
-                    horario_str = str(alvo.get('Horário', '08:30'))
-                    try:
-                        horario_fim_alvo = (
-                                    pd.to_datetime(horario_str, format='%H:%M') + pd.Timedelta(minutes=15)).strftime(
-                            '%H:%M')
-                        horario_formatado_alvo = f"{horario_str}-{horario_fim_alvo}"
-                    except Exception:
-                        horario_formatado_alvo = horario_str
+                    horario_alvo_fmt = self.formatar_horario(alvo.get('Horário', '08:30'))
 
                     valores_linha = (
                         alvo.get('Apresentador(a)', 'N/A'),
                         alvo.get('Orientador(a)', 'N/A'),
                         f"Dia {alvo.get('Dia', '1')}",
                         alvo.get('Sala', 'N/A'),
-                        horario_formatado_alvo
+                        horario_alvo_fmt
                     )
                 self.opcoes_tree.insert('', tk.END, iid=i, values=valores_linha)
             self.btn_confirmar.config(state=tk.NORMAL)

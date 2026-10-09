@@ -1,0 +1,49 @@
+# ==========================================
+# ARQUIVOS GERADOS / SAÍDAS DO ENSALAMENTO
+# ==========================================
+# Ignora todos os CSVs gerados dentro da pasta public/csv/
+public/csv/*.csv
+
+# Ignora todos os PDFs e DOCXs gerados nas pastas de saída
+pdfs/*.pdf
+docx/*.docx
+docxs/*.docx
+
+# Ignora relatórios e arquivos temporários de exportação
+*.pdf
+*.docx
+
+# ==========================================
+# CONFIGURAÇÕES DO USUÁRIO / EVENTO
+# ==========================================
+# Se você NÃO quiser subir os dados locais configurados (descomente se necessário):
+# public/config/*.csv
+# public/config/*.json
+
+# Exceção: Mantém o diretório public/ e public/config/ estruturados no Git
+!public/
+!public/config/
+!public/csv/.gitkeep
+!pdfs/.gitkeep
+!docx/.gitkeep
+
+# ==========================================
+# PYTHON & AMBIENTE VIRTUAL
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+
+# ==========================================
+# ARQUIVOS DE IDE E SISTEMA OPERACIONAL
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

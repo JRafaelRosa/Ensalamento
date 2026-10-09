@@ -15,6 +15,7 @@ try:
     from src.sala import carregar_config_geral
     from src.limpeza import executar_limpeza
     from src.gui_config import JanelaConfig
+    from src.gui_alocar_nao_alocados import JanelaAlocarNaoAlocados
 except ImportError as e:
     messagebox.showerror(
         "Erro de Importação",
@@ -41,12 +42,12 @@ class JanelaGerenciador(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Sistema de Ensalamento EAIC - Gerenciar Evento")
-        self.geometry("820x720")
+        self.geometry("840x740")
 
         try:
             self.configs = carregar_config_geral()
             if not self.configs or self.configs[0] is None:
-                raise FileNotFoundError("Ficheiros em public/config estão incompletos ou corrompidos.")
+                raise FileNotFoundError("Arquivos em public/config estão incompletos ou corrompidos.")
 
             config_areas_df = self.configs[1].reset_index() if self.configs[1].index.name == 'nome_base' else self.configs[1]
             self.dias_evento = self.configs[0].get("DIAS_EVENTO", 2)
@@ -64,14 +65,16 @@ class JanelaGerenciador(tk.Toplevel):
             self.destroy()
             messagebox.showerror(
                 "Erro de Configuração",
-                f"Falha ao carregar ficheiros de configuração:\n{e}\n\n"
-                "Execute 'Criar / Recriar Configurações do Evento' no menu principal primeiro."
+                f"Falha ao carregar arquivos de configuração:\n{e}\n\n"
+                "Acesse 'Configurações' para ajustar os parâmetros antes de continuar.",
+                parent=parent
             )
             return
 
         main_frame = tk.Frame(self, padx=15, pady=15)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
+        # Seleção de Área
         top_frame = tk.Frame(main_frame)
         top_frame.pack(fill=tk.X, pady=(0, 10))
         tk.Label(top_frame, text="Área de Trabalho:", font=("Helvetica", 10, "bold")).pack(side=tk.LEFT)
@@ -86,6 +89,7 @@ class JanelaGerenciador(tk.Toplevel):
         self.label_contagem = ttk.Label(top_frame, text="Total: --", font=("Helvetica", 9, "italic"))
         self.label_contagem.pack(side=tk.LEFT)
 
+        # Ações do Ensalamento
         botoes_frame = tk.Frame(main_frame)
         botoes_frame.pack(fill=tk.X, pady=(0, 10))
         btn_gerar = ttk.Button(botoes_frame, text="Gerar/Regerar Ensalamento", command=self.handle_gerar_ensalamento)
@@ -97,7 +101,14 @@ class JanelaGerenciador(tk.Toplevel):
         btn_consultar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         btn_trocar = ttk.Button(botoes_ferramentas_frame, text="Ajuste Manual...", command=self.handle_trocar)
         btn_trocar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        btn_alocar_manual = ttk.Button(
+            botoes_ferramentas_frame,
+            text="Alocar Não Alocado...",
+            command=self.handle_alocar_nao_alocados_gui
+        )
+        btn_alocar_manual.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
+        # Relatórios
         reports_frame = ttk.LabelFrame(main_frame, text="Verificação e Relatórios")
         reports_frame.pack(fill=tk.X, pady=(10, 10))
         btn_verificar = ttk.Button(reports_frame, text="Verificar Consistência", command=self.handle_verificar)
@@ -109,19 +120,21 @@ class JanelaGerenciador(tk.Toplevel):
         btn_pdf = ttk.Button(reports_frame, text="Gerar PDFs / Docxs", command=self.handle_gerar_pdf)
         btn_pdf.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5)
 
+        # Configurações do Sistema
         config_frame = ttk.LabelFrame(main_frame, text="Configurações")
         config_frame.pack(fill=tk.X, pady=(10, 10))
-        btn_configs = ttk.Button(config_frame, text="Abrir Painel de Configurações do Evento...", command=self.handle_abrir_config)
+        btn_configs = ttk.Button(config_frame, text="Abrir Painel de Configurações e Parâmetros...", command=self.handle_abrir_config)
         btn_configs.pack(fill=tk.X, expand=True, padx=2, pady=5)
 
+        # Log
         log_label = tk.Label(main_frame, text="Log de Operações:", font=("Helvetica", 10, "bold"))
         log_label.pack(anchor="w")
-        self.log_text = scrolledtext.ScrolledText(main_frame, wrap=tk.WORD, height=18, bg="#f8f9fa")
+        self.log_text = scrolledtext.ScrolledText(main_frame, wrap=tk.WORD, height=16, bg="#f8f9fa")
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
         self.all_buttons = [
             btn_gerar, btn_verificar, btn_pdf, btn_consultar, btn_trocar,
-            btn_nao_alocados, btn_listar_todos, btn_configs
+            btn_nao_alocados, btn_listar_todos, btn_configs, btn_alocar_manual
         ]
 
         self.original_stdout = sys.stdout
@@ -186,7 +199,7 @@ class JanelaGerenciador(tk.Toplevel):
 
         def processar_geracao():
             for area in areas:
-                print(f"\n" + "=" * 60)
+                print("\n" + "=" * 60)
                 print(f"--- GERANDO ENSALAMENTO PARA: {area} ---".center(60))
                 print("=" * 60 + "\n")
                 ensalamento(area, *self.configs)
@@ -245,6 +258,15 @@ class JanelaGerenciador(tk.Toplevel):
             return
         JanelaTrocar(self, nome_base)
 
+    def handle_alocar_nao_alocados_gui(self):
+        if self.is_todas_selecionado():
+            messagebox.showinfo("Aviso", "Selecione uma área específica para realizar alocações manuais.", parent=self)
+            return
+        nome_base = self.get_raw_selected_area_name()
+        if not nome_base:
+            return
+        JanelaAlocarNaoAlocados(self, nome_base)
+
     def atualizar_contagem(self, *args):
         nome_base = self.get_raw_selected_area_name()
         if not nome_base:
@@ -253,7 +275,6 @@ class JanelaGerenciador(tk.Toplevel):
 
         total = 0
         dias = getattr(self, 'dias_evento', 2)
-
         areas_contar = self.todas_areas_base if nome_base == "TODAS" else [nome_base]
 
         for area in areas_contar:
@@ -317,7 +338,7 @@ class JanelaGerenciador(tk.Toplevel):
                 for _, trabalho in df_orientador.iterrows():
                     txt.insert(tk.END, f"  - Apresentador(a): {trabalho.get('Apresentador(a)', 'N/A')}\n")
                     txt.insert(tk.END, f"    Título: {trabalho.get('Título', 'N/A')}\n")
-                    txt.insert(tk.END, f"    Local: Area {trabalho.get('Área_Origem', 'N/A')} - Sala {trabalho.get('Sala', 'N/A')} - {trabalho.get('Horário', 'N/A')} ({trabalho.get('Sessão', 'N/A')})\n")
+                    txt.insert(tk.END, f"    Local: Área {trabalho.get('Área_Origem', 'N/A')} | Sala {trabalho.get('Sala', 'N/A')} | Horário: {trabalho.get('Horário', 'N/A')} ({trabalho.get('Sessão', 'N/A')})\n")
         txt.config(state=tk.DISABLED)
 
     def handle_abrir_config(self):
@@ -335,24 +356,6 @@ def reabrir_menu_principal(root, janela):
     root.deiconify()
 
 
-def abrir_script_externo(script_relativo):
-    """Abre scripts externos garantindo o caminho correto dentro da pasta src/."""
-    caminho_script = os.path.normpath(script_relativo)
-
-    messagebox.showinfo(
-        "Aviso",
-        f"A ferramenta '{caminho_script}' será aberta em um novo terminal.\n"
-        "Feche o terminal ao concluir."
-    )
-
-    if sys.platform.startswith("win"):
-        comando = f'start cmd /k "python {caminho_script}"'
-    else:
-        comando = f'gnome-terminal -- python3 {caminho_script}'
-
-    subprocess.Popen(comando, shell=True)
-
-
 def main():
     root = tk.Tk()
     root.withdraw()
@@ -361,8 +364,8 @@ def main():
     splash.overrideredirect(True)
 
     width, height = 400, 250
-    pos_x = root.winfo_screenwidth() // 2 - width // 2
-    pos_y = root.winfo_screenheight() // 2 - height // 2
+    pos_x = (root.winfo_screenwidth() // 2) - (width // 2)
+    pos_y = (root.winfo_screenheight() // 2) - (height // 2)
     splash.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
     splash.config(bg="#e0e8f0")
 
@@ -381,8 +384,8 @@ def main():
         root.title("Sistema de Ensalamento EAIC - Menu Principal")
 
         m_width, m_height = 500, 320
-        m_x = root.winfo_screenwidth() // 2 - m_width // 2
-        m_y = root.winfo_screenheight() // 2 - m_height // 2
+        m_x = (root.winfo_screenwidth() // 2) - (m_width // 2)
+        m_y = (root.winfo_screenheight() // 2) - (m_height // 2)
         root.geometry(f"{m_width}x{m_height}+{m_x}+{m_y}")
 
         menu_frame = tk.Frame(root, padx=20, pady=20)
@@ -392,8 +395,8 @@ def main():
 
         ttk.Button(
             menu_frame,
-            text="Criar / Recriar Configurações do Evento",
-            command=lambda: abrir_script_externo("src/gerador_config.py")
+            text="Configurações e Parâmetros do Evento",
+            command=lambda: JanelaConfig(root)
         ).pack(fill=tk.X, ipady=5, pady=4)
 
         ttk.Button(
@@ -402,10 +405,18 @@ def main():
             command=lambda: abrir_gerenciador_evento(root)
         ).pack(fill=tk.X, ipady=5, pady=4)
 
+        def executar_limpeza_gui():
+            if messagebox.askyesno("Confirmar Limpeza", "Tem certeza que deseja apagar os arquivos CSVs, PDFs e Docxs gerados?", parent=root):
+                try:
+                    executar_limpeza()
+                    messagebox.showinfo("Sucesso", "Limpeza de dados executada com sucesso!", parent=root)
+                except Exception as ex:
+                    messagebox.showerror("Erro", f"Falha ao executar limpeza: {ex}", parent=root)
+
         ttk.Button(
             menu_frame,
-            text="Limpar Dados Gerados (CSVs, PDFs)",
-            command=lambda: abrir_script_externo("src/limpeza.py")
+            text="Limpar Dados Gerados (CSVs, PDFs, Docxs)",
+            command=executar_limpeza_gui
         ).pack(fill=tk.X, ipady=5, pady=4)
 
     root.after(2000, abrir_menu_principal)

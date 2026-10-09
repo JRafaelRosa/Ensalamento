@@ -6,7 +6,7 @@ from fpdf.fonts import FontFace
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn, nsdecls
 
@@ -15,14 +15,14 @@ try:
 except ImportError:
     from sala import obter_info_area, obter_nome_fisico
 
-# Definição de Cores Padrão (RGB e HEX)
+# Definição de Cores Padrão (RGB e HEX exatos)
 COLOR_AZUL_FUNDO = (220, 230, 240)
 COLOR_AZUL_TEXTO = (20, 50, 120)
 COLOR_CINZA_ZEBRA = (240, 240, 240)
 
 HEX_AZUL_FUNDO = "DCE6F0"
 HEX_CINZA_ZEBRA = "F0F0F0"
-HEX_BORDA_CINZA = "B0B0B0"
+HEX_BORDA_CINZA = "808080"
 
 
 def sanitize_text(text):
@@ -60,7 +60,6 @@ class PDF(FPDF):
     def __init__(self, orientation='P', unit='mm', format='A4', area_name='Relatório', event_date=''):
         super().__init__(orientation, unit, format)
 
-        # Garante que não haja duplicação de '- EAIC' no título
         nome_limpo = area_name.upper()
         if nome_limpo.endswith(" - EAIC"):
             self.area_name = nome_limpo
@@ -89,7 +88,6 @@ class PDF(FPDF):
 
 
 def pdf_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
-    """Gera o arquivo PDF do ensalamento a partir do CSV ordenado por horário."""
     if not caminho_csv or not os.path.exists(caminho_csv):
         return
 
@@ -120,7 +118,6 @@ def pdf_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
     pdf.set_auto_page_break(auto=True, margin=15)
     FONTE_PADRAO = "Helvetica"
 
-    # Ordenação Cronológica das Sessões
     df['Ordem_Sessao'] = df['Sessão'].apply(obter_ordem_sessao)
     df['Horario_DT'] = pd.to_datetime(df['Horário'], format='%H:%M', errors='coerce')
     df_ordenado = df.sort_values(by=['Ordem_Sessao', 'Sala', 'Horario_DT']).reset_index(drop=True)
@@ -209,21 +206,28 @@ def pdf_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
 
 
 # ==========================================
-# 2. GERAÇÃO DE WORD (.DOCX) - ORDENADO POR HORÁRIO
+# 2. GERAÇÃO DE WORD (.DOCX) - FORMATO IDÊNTICO AO PDF
 # ==========================================
 
 def _set_cell_background(cell, fill_hex):
-    """Define a cor de fundo de uma célula da tabela do Word."""
     tcPr = cell._tc.get_or_add_tcPr()
-    shd = OxmlElement('w:shd')
-    shd.set(qn('w:val'), 'clear')
-    shd.set(qn('w:color'), 'auto')
-    shd.set(qn('w:fill'), fill_hex)
+    shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{fill_hex}"/>')
     tcPr.append(shd)
 
 
-def _set_table_borders(table, color_hex="B0B0B0"):
-    """Aplica bordas finas personalizadas na tabela do Word."""
+def _set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
+    """Define as margens internas da célula no Word para bater com o padding do PDF."""
+    tcPr = cell._tc.get_or_add_tcPr()
+    tcMar = OxmlElement('w:tcMar')
+    for m, val in [('top', top), ('bottom', bottom), ('left', left), ('right', right)]:
+        node = OxmlElement(f'w:{m}')
+        node.set(qn('w:w'), str(val))
+        node.set(qn('w:type'), 'dxa')
+        tcMar.append(node)
+    tcPr.append(tcMar)
+
+
+def _set_table_borders(table, color_hex="808080"):
     tblPr = table._tbl.tblPr
     borders = parse_xml(
         f'<w:tblBorders {nsdecls("w")}>\n'
@@ -239,7 +243,6 @@ def _set_table_borders(table, color_hex="B0B0B0"):
 
 
 def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
-    """Gera o documento Word (.docx) ordenado por horário e formatado igual ao PDF."""
     if not caminho_csv or not os.path.exists(caminho_csv):
         return
 
@@ -258,7 +261,6 @@ def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
 
     nome_area_completo = info_area.get('nome_completo', nome_area_base) if info_area else nome_area_base
 
-    # Tratamento para evitar "- EAIC - EAIC"
     if not nome_area_completo.upper().endswith(" - EAIC"):
         nome_area_completo = f"{nome_area_completo.upper()} - EAIC"
     else:
@@ -273,41 +275,43 @@ def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
 
     doc = Document()
 
-    # Configuração das Margens (A4)
+    # Margens idênticas ao A4 do PDF
     sections = doc.sections
     for section in sections:
-        section.top_margin = Inches(0.6)
-        section.bottom_margin = Inches(0.6)
-        section.left_margin = Inches(0.6)
-        section.right_margin = Inches(0.6)
+        section.top_margin = Inches(0.5)
+        section.bottom_margin = Inches(0.5)
+        section.left_margin = Inches(0.5)
+        section.right_margin = Inches(0.5)
 
-    # 1. Cabeçalho do Documento
+    # 1. Cabeçalho Principal do Documento
     title_p = doc.add_paragraph()
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title_p.paragraph_format.space_after = Pt(2)
 
     run_title = title_p.add_run(f"{nome_area_completo}\n")
-    run_title.font.name = 'Calibri'
+    run_title.font.name = 'Arial'
     run_title.font.size = Pt(16)
     run_title.font.bold = True
     run_title.font.color.rgb = RGBColor(*COLOR_AZUL_TEXTO)
 
     run_sub = title_p.add_run("UNIVERSIDADE ESTADUAL DE PONTA GROSSA\n")
-    run_sub.font.name = 'Calibri'
+    run_sub.font.name = 'Arial'
     run_sub.font.size = Pt(12)
     run_sub.font.bold = True
     run_sub.font.color.rgb = RGBColor(*COLOR_AZUL_TEXTO)
 
     if data_do_evento:
         run_date = title_p.add_run(f"Data: {data_do_evento}")
-        run_date.font.name = 'Calibri'
+        run_date.font.name = 'Arial'
         run_date.font.size = Pt(12)
         run_date.font.bold = True
         run_date.font.color.rgb = RGBColor(*COLOR_AZUL_TEXTO)
 
-    doc.add_paragraph()
+    p_space = doc.add_paragraph()
+    p_space.paragraph_format.space_before = Pt(0)
+    p_space.paragraph_format.space_after = Pt(6)
 
-    # Ordenação Cronológica das Sessões
+    # Ordenação Cronológica
     df['Ordem_Sessao'] = df['Sessão'].apply(obter_ordem_sessao)
     df['Horario_DT'] = pd.to_datetime(df['Horário'], format='%H:%M', errors='coerce')
     df_ordenado = df.sort_values(by=['Ordem_Sessao', 'Sala', 'Horario_DT']).reset_index(drop=True)
@@ -327,61 +331,77 @@ def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
         nome_sala_fisica = obter_nome_fisico(nome_sala_logica, mapa_salas_df)
         titulo_sala_final = f"SESSÃO {nome_sala_logica} - {str(nome_sala_fisica).upper()}"
 
-        # 2. Caixa de Banner Azul Claro
+        # 2. Banner de Título Sem Bordas Externas
         banner_table = doc.add_table(rows=1, cols=1)
         banner_table.alignment = WD_TABLE_ALIGNMENT.CENTER
         banner_cell = banner_table.cell(0, 0)
         _set_cell_background(banner_cell, HEX_AZUL_FUNDO)
-        banner_cell.width = Inches(7.1)
+        _set_cell_margins(banner_cell, top=120, bottom=120, left=150, right=150)
+        banner_cell.width = Inches(7.2)
+
+        # Remove as bordas do banner de sessão para ficar igual ao bloco do PDF
+        tblPr = banner_table._tbl.tblPr
+        tblBorders = parse_xml(
+            f'<w:tblBorders {nsdecls("w")}>\n'
+            f'  <w:top w:val="none"/>\n'
+            f'  <w:bottom w:val="none"/>\n'
+            f'  <w:left w:val="none"/>\n'
+            f'  <w:right w:val="none"/>\n'
+            f'</w:tblBorders>'
+        )
+        tblPr.append(tblBorders)
 
         banner_p = banner_cell.paragraphs[0]
         banner_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        banner_p.paragraph_format.space_before = Pt(4)
-        banner_p.paragraph_format.space_after = Pt(4)
+        banner_p.paragraph_format.space_before = Pt(2)
+        banner_p.paragraph_format.space_after = Pt(2)
 
         r_horario = banner_p.add_run(f"{novo_titulo_sessao}\n")
-        r_horario.font.name = 'Calibri'
+        r_horario.font.name = 'Arial'
         r_horario.font.size = Pt(13)
         r_horario.font.bold = True
         r_horario.font.color.rgb = RGBColor(0, 0, 0)
 
         r_sala = banner_p.add_run(titulo_sala_final)
-        r_sala.font.name = 'Calibri'
+        r_sala.font.name = 'Arial'
         r_sala.font.size = Pt(12)
         r_sala.font.bold = True
         r_sala.font.color.rgb = RGBColor(0, 0, 0)
 
-        p_spacer = doc.add_paragraph()
-        p_spacer.paragraph_format.space_after = Pt(2)
+        p_sp = doc.add_paragraph()
+        p_sp.paragraph_format.space_before = Pt(0)
+        p_sp.paragraph_format.space_after = Pt(3)
 
-        # 3. Tabela Principal de Trabalhos
+        # 3. Tabela Principal
         table = doc.add_table(rows=1, cols=4)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         _set_table_borders(table, HEX_BORDA_CINZA)
 
-        widths = [Inches(1.1), Inches(1.8), Inches(1.8), Inches(2.4)]
+        # Proporção idêntica de colunas ao PDF (22mm, 40mm, 40mm, 88mm -> ~1:1.8:1.8:4.0 em polegadas)
+        widths = [Inches(0.9), Inches(1.65), Inches(1.65), Inches(3.0)]
 
+        # Cabeçalho da Tabela
         hdr_cells = table.rows[0].cells
         cabeçalhos = ["Horário", "Apresentador(a)", "Orientador(a)", "Título"]
 
         for i, title in enumerate(cabeçalhos):
             hdr_cells[i].width = widths[i]
             _set_cell_background(hdr_cells[i], HEX_AZUL_FUNDO)
+            _set_cell_margins(hdr_cells[i], top=80, bottom=80, left=100, right=100)
+            hdr_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
             p_hdr = hdr_cells[i].paragraphs[0]
-            p_hdr.paragraph_format.space_before = Pt(2)
-            p_hdr.paragraph_format.space_after = Pt(2)
-            if i == 0:
-                p_hdr.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            else:
-                p_hdr.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            p_hdr.paragraph_format.space_before = Pt(1)
+            p_hdr.paragraph_format.space_after = Pt(1)
+            p_hdr.alignment = WD_ALIGN_PARAGRAPH.CENTER if i == 0 else WD_ALIGN_PARAGRAPH.LEFT
 
             r_hdr = p_hdr.add_run(title)
-            r_hdr.font.name = 'Calibri'
+            r_hdr.font.name = 'Arial'
             r_hdr.font.size = Pt(9.5)
             r_hdr.font.bold = True
             r_hdr.font.color.rgb = RGBColor(0, 0, 0)
 
+        # Linhas de Conteúdo
         for row_idx, (_, trabalho) in enumerate(df_grupo.iterrows()):
             row_cells = table.add_row().cells
             horario_str = str(trabalho.get('Horário', '08:30'))
@@ -406,25 +426,25 @@ def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
 
             for i, val in enumerate(valores):
                 row_cells[i].width = widths[i]
+                _set_cell_margins(row_cells[i], top=70, bottom=70, left=100, right=100)
+                row_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
                 if is_zebra:
                     _set_cell_background(row_cells[i], HEX_CINZA_ZEBRA)
 
                 p_cell = row_cells[i].paragraphs[0]
-                p_cell.paragraph_format.space_before = Pt(2)
-                p_cell.paragraph_format.space_after = Pt(2)
-
-                if i == 0:
-                    p_cell.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                else:
-                    p_cell.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p_cell.paragraph_format.space_before = Pt(1)
+                p_cell.paragraph_format.space_after = Pt(1)
+                p_cell.alignment = WD_ALIGN_PARAGRAPH.CENTER if i == 0 else WD_ALIGN_PARAGRAPH.LEFT
 
                 r_val = p_cell.add_run(val)
-                r_val.font.name = 'Calibri'
+                r_val.font.name = 'Arial'
                 r_val.font.size = Pt(9)
                 r_val.font.color.rgb = RGBColor(0, 0, 0)
 
         p_fim = doc.add_paragraph()
-        p_fim.paragraph_format.space_after = Pt(12)
+        p_fim.paragraph_format.space_before = Pt(0)
+        p_fim.paragraph_format.space_after = Pt(14)
 
     PASTA_SAIDA = "docx/"
     os.makedirs(PASTA_SAIDA, exist_ok=True)
@@ -440,6 +460,5 @@ def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
 
 
 def gerar_documentos_finais(caminho_csv, config_areas_df, mapa_salas_df):
-    """Função unificada para gerar simultaneamente os arquivos PDF e Word."""
     pdf_ensalamento(caminho_csv, config_areas_df, mapa_salas_df)
     word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df)

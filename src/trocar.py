@@ -3,6 +3,19 @@ import os
 import pandas as pd
 
 
+def sanitize_text(text):
+    """Sanitiza textos para evitar erros de codificação no FPDF / latin-1."""
+    if text is None:
+        return ""
+    s = str(text)
+    substituicoes = {
+        '–': '-', '—': '-', '“': '"', '”': '"', '‘': "'", '’': "'", '…': '...'
+    }
+    for orig, sub in substituicoes.items():
+        s = s.replace(orig, sub)
+    return s.strip()
+
+
 def carregar_regras_evento():
     """Lê as regras globais configuradas em config_evento.json."""
     caminho_config = "public/config/config_evento.json"
@@ -55,16 +68,101 @@ def carregar_ensalamento(nome_base):
     return df_completo, orientadores_por_bloco
 
 
+def carregar_trabalhos_nao_alocados(nome_base):
+    """Lê o arquivo original de trabalhos da área e compara com os trabalhos que já foram ensalados nos CSVs."""
+    try:
+        from src.sala import carregar_config_geral
+    except ImportError:
+        from sala import carregar_config_geral
+
+    configs = carregar_config_geral()
+    if not configs or configs[0] is None:
+        return []
+
+    config_areas_df = configs[1]
+    if 'nome_base' in config_areas_df.columns:
+        row_area = config_areas_df[config_areas_df['nome_base'].str.upper() == nome_base.upper()]
+    else:
+        row_area = config_areas_df[config_areas_df.index.str.upper() == nome_base.upper()]
+
+    if row_area.empty:
+        return []
+
+    caminho_base = row_area.iloc[0]['caminho_arquivo_base']
+    if not os.path.exists(caminho_base):
+        return []
+
+    if caminho_base.lower().endswith('.csv'):
+        df_orig = pd.read_csv(caminho_base, encoding="utf-8-sig")
+    else:
+        df_orig = pd.read_excel(caminho_base)
+
+    df_orig.rename(columns={
+        'Apresentador': 'Apresentador(a)', 'Aluno': 'Apresentador(a)',
+        'Título': 'Título', 'Titulo': 'Título',
+        'Orientador': 'Orientador(a)'
+    }, inplace=True, errors='ignore')
+
+    df_ensalado, _ = carregar_ensalamento(nome_base)
+    if df_ensalado is None or df_ensalado.empty:
+        nomes_ensalados = set()
+    else:
+        nomes_ensalados = set(df_ensalado['Apresentador(a)'].dropna().astype(str).str.strip())
+
+    df_nao_alocados = df_orig[~df_orig['Apresentador(a)'].astype(str).str.strip().isin(nomes_ensalados)].copy()
+    return df_nao_alocados.to_dict('records')
+
+
+def forcar_alocacao_manual(df_ensalamento, trabalho, dia_alvo, sessao_alvo, sala_alvo, nome_base):
+    """Insere manualmente um trabalho não alocado na sessão e sala escolhidas pelo usuário e salva."""
+    df_sessao = df_ensalamento[
+        (df_ensalamento['Dia'] == int(dia_alvo)) &
+        (df_ensalamento['Sessão'].str.contains(sessao_alvo, case=False, na=False)) &
+        (df_ensalamento['Sala'].astype(str) == str(sala_alvo))
+    ]
+
+    horario_inicio_sessao = "08:30"
+    if "Manhã 2" in str(sessao_alvo):
+        horario_inicio_sessao = "10:30"
+    elif "Tarde" in str(sessao_alvo):
+        horario_inicio_sessao = "14:00"
+
+    if not df_sessao.empty:
+        ultimo_horario = df_sessao['Horário'].iloc[-1]
+        try:
+            proximo_horario = (pd.to_datetime(ultimo_horario, format='%H:%M') + pd.Timedelta(minutes=15)).strftime('%H:%M')
+        except Exception:
+            proximo_horario = horario_inicio_sessao
+    else:
+        proximo_horario = horario_inicio_sessao
+
+    bloco_id = f"D{dia_alvo}-{sessao_alvo}"
+
+    novo_registro = {
+        'Dia': int(dia_alvo),
+        'Nome_Sessao': sessao_alvo,
+        'Sessão': f"{sessao_alvo} ({horario_inicio_sessao})",
+        'Horário': proximo_horario,
+        'Sala': str(sala_alvo),
+        'Título': sanitize_text(trabalho.get('Título', 'Sem Título')),
+        'Apresentador(a)': sanitize_text(trabalho.get('Apresentador(a)', 'N/A')),
+        'Orientador(a)': sanitize_text(trabalho.get('Orientador(a)', 'N/A')),
+        'Bloco_ID': bloco_id
+    }
+
+    df_atualizado = pd.concat([df_ensalamento, pd.DataFrame([novo_registro])], ignore_index=True)
+    salvar_ensalamento(df_atualizado, nome_base)
+    return True
+
+
 def salvar_ensalamento(df, nome_base):
     """Reordena e recalcula os horários de cada slot antes de salvar os arquivos por dia."""
     PASTA_SAIDA_CSV = "public/csv"
     os.makedirs(PASTA_SAIDA_CSV, exist_ok=True)
     _, _, dias_evento = carregar_regras_evento()
 
-    # Prepara o dataframe ordenado por dia, sessão e sala
     df_trabalhos = df.copy()
 
-    # Tratamento seguro para conversão de horários
     df_trabalhos['Horario_DT'] = pd.to_datetime(df_trabalhos['Horário'], format='%H:%M', errors='coerce')
     df_corrigido = df_trabalhos.sort_values(by=['Dia', 'Sessão', 'Sala', 'Horario_DT']).reset_index(drop=True)
 
@@ -117,7 +215,7 @@ def movimento_e_valido(orientador, bloco_alvo, sala_alvo, orientadores_por_bloco
     """Verifica se um orientador já possui aluno em outra sala na mesma sessão e bloco de horário."""
     orientadores_no_bloco = orientadores_por_bloco.get(bloco_alvo, {})
     for sala, orientadores in orientadores_no_bloco.items():
-        if sala != sala_alvo and orientador in orientadores:
+        if str(sala) != str(sala_alvo) and orientador in orientadores:
             return False
     return True
 
@@ -188,8 +286,7 @@ def trocar(nome_base):
 
         print("\nTrabalho encontrado:")
         print(f"  - Apresentador(a): {trabalho_original.get('Apresentador(a)', 'N/A')}")
-        print(
-            f"  - Local Atual    : Dia {trabalho_original.get('Dia', '1')}, Sala {trabalho_original.get('Sala', 'N/A')}, Horário: {trabalho_original.get('Horário', 'N/A')}")
+        print(f"  - Local Atual    : Dia {trabalho_original.get('Dia', '1')}, Sala {trabalho_original.get('Sala', 'N/A')}, Horário: {trabalho_original.get('Horário', 'N/A')}")
 
         print("\nBuscando todas as opções de movimentação válidas. Aguarde...")
         opcoes_validas = []
@@ -197,7 +294,7 @@ def trocar(nome_base):
         df_sessao_origem = df[
             (df['Bloco_ID'] == trabalho_original['Bloco_ID']) &
             (df['Sala'] == trabalho_original['Sala'])
-            ]
+        ]
 
         # 1. Busca por TROCAS válidas com outros trabalhos
         for idx_alvo, trabalho_alvo in df.iterrows():
@@ -244,12 +341,10 @@ def trocar(nome_base):
         for i, opcao in enumerate(opcoes_validas):
             if opcao['tipo'] == 'MOVER':
                 destino = opcao['destino']
-                print(
-                    f" {i + 1}. MOVER para um slot vago na Sala {destino['Sala']} ({destino['Sessão']}, Dia {destino['Dia']})")
+                print(f" {i + 1}. MOVER para um slot vago na Sala {destino['Sala']} ({destino['Sessão']}, Dia {destino['Dia']})")
             else:
                 alvo = opcao['alvo']
-                print(
-                    f" {i + 1}. TROCAR com '{alvo.get('Apresentador(a)', 'N/A')}' (Sala {alvo.get('Sala', 'N/A')}, Dia {alvo.get('Dia', '1')}, Horário {alvo.get('Horário', 'N/A')})")
+                print(f" {i + 1}. TROCAR com '{alvo.get('Apresentador(a)', 'N/A')}' (Sala {alvo.get('Sala', 'N/A')}, Dia {alvo.get('Dia', '1')}, Horário {alvo.get('Horário', 'N/A')})")
 
         try:
             escolha = int(input("\nEscolha o número da opção desejada (ou 0 para cancelar): ").strip())
