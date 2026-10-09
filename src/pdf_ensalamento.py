@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
@@ -29,11 +30,34 @@ def sanitize_text(text):
     return s.encode('latin-1', 'replace').decode('latin-1')
 
 
+def obter_data_evento_por_dia(nome_base_arquivo):
+    """Lê o arquivo config_evento.json e retorna a data exata do dia correspondente."""
+    caminho_config = "public/config/config_evento.json"
+    datas_evento = []
+
+    if os.path.exists(caminho_config):
+        try:
+            with open(caminho_config, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                datas_evento = config.get("DATAS_EVENTO", [])
+        except Exception:
+            pass
+
+    if "_dia" in nome_base_arquivo:
+        try:
+            dia_num = int(nome_base_arquivo.split('_dia')[1].split('.')[0])
+            if datas_evento and 1 <= dia_num <= len(datas_evento):
+                return datas_evento[dia_num - 1]
+        except Exception:
+            pass
+
+    return ""
+
+
 class PDF(FPDF):
     def __init__(self, orientation='P', unit='mm', format='A4', area_name='Relatório', event_date=''):
         super().__init__(orientation, unit, format)
 
-        # Ajusta para evitar duplicidade de "- EAIC"
         nome_limpo = area_name.upper()
         if nome_limpo.endswith(" - EAIC"):
             self.area_name = nome_limpo
@@ -46,14 +70,13 @@ class PDF(FPDF):
         self.set_font('Helvetica', 'B', 16)
         self.set_text_color(*COLOR_AZUL_TEXTO)
         self.cell(0, 8, sanitize_text(self.area_name), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-        self.set_font('Helvetica', '', 12)
+        self.set_font('Helvetica', 'B', 12)
         self.cell(0, 8, 'UNIVERSIDADE ESTADUAL DE PONTA GROSSA', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
 
         if self.event_date:
-            self.set_font('Helvetica', 'B', 12)
             self.cell(0, 8, sanitize_text(f"Data: {self.event_date}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
 
-        self.ln(10)
+        self.ln(6)
 
     def footer(self):
         self.set_y(-15)
@@ -103,13 +126,7 @@ def pdf_ensalamento(caminho_completo_do_arquivo_csv, config_areas_df, mapa_salas
         return
 
     nome_area_completo = info_area.get('nome_completo', nome_area_base)
-
-    if "_dia1" in nome_base_arquivo:
-        data_do_evento = "27/10/2026"
-    elif "_dia2" in nome_base_arquivo:
-        data_do_evento = "28/10/2026"
-    else:
-        data_do_evento = ""
+    data_do_evento = obter_data_evento_por_dia(nome_base_arquivo)
 
     pdf = PDF('P', 'mm', 'A4', area_name=nome_area_completo, event_date=data_do_evento)
     pdf.add_page()
@@ -120,10 +137,7 @@ def pdf_ensalamento(caminho_completo_do_arquivo_csv, config_areas_df, mapa_salas
     df['Ordem_Sessao'] = df['Sessão'].apply(obter_ordem_sessao)
     df['Horario_DT'] = pd.to_datetime(df['Horário'], format='%H:%M', errors='coerce')
 
-    # Ordena o DataFrame: 1º por Horário da Sessão, 2º por Sala, 3º por Slot de Apresentação
     df_ordenado = df.sort_values(by=['Ordem_Sessao', 'Sala', 'Horario_DT']).reset_index(drop=True)
-
-    # Agrupa mantendo a ordem correta
     sessoes_agrupadas = df_ordenado.groupby(['Sessão', 'Sala'], sort=False)
 
     for (nome_sessao, nome_sala_logica), df_grupo in sessoes_agrupadas:
@@ -140,18 +154,20 @@ def pdf_ensalamento(caminho_completo_do_arquivo_csv, config_areas_df, mapa_salas
             novo_titulo_sessao = str(nome_sessao)
 
         nome_sala_fisica = obter_nome_fisico(nome_sala_logica, mapa_salas_df)
-        titulo_sala_final = f"SESSÃO {nome_sala_logica} - {str(nome_sala_fisica).upper()}"
+        sala_fisica_str = str(nome_sala_fisica).strip().upper()
+        if not sala_fisica_str.startswith("SALA"):
+            sala_fisica_str = f"SALA {sala_fisica_str}"
+
+        titulo_sala_final = f"SESSÃO {nome_sala_logica} - {sala_fisica_str}"
 
         pdf.set_font(FONTE_PADRAO, 'B', 14)
         pdf.set_fill_color(*COLOR_AZUL_FUNDO)
         pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 10, sanitize_text(novo_titulo_sessao), new_x=XPos.LMARGIN, new_y=YPos.NEXT, border=0, align='C',
-                 fill=True)
+        pdf.cell(0, 9, sanitize_text(novo_titulo_sessao), new_x=XPos.LMARGIN, new_y=YPos.NEXT, border=0, align='C', fill=True)
 
         pdf.set_font(FONTE_PADRAO, 'B', 12)
-        pdf.cell(0, 8, sanitize_text(titulo_sala_final), new_x=XPos.LMARGIN, new_y=YPos.NEXT, border=0, align='C',
-                 fill=True)
-        pdf.ln(5)
+        pdf.cell(0, 7, sanitize_text(titulo_sala_final), new_x=XPos.LMARGIN, new_y=YPos.NEXT, border=0, align='C', fill=True)
+        pdf.ln(4)
 
         dados_tabela = [[sanitize_text(col) for col in ["Horário", "Apresentador(a)", "Orientador(a)", "Título"]]]
 
@@ -194,7 +210,7 @@ def pdf_ensalamento(caminho_completo_do_arquivo_csv, config_areas_df, mapa_salas
                 for datum in data_row:
                     row.cell(datum)
 
-        pdf.ln(15)
+        pdf.ln(12)
 
     PASTA_SAIDA = "pdfs/"
     os.makedirs(PASTA_SAIDA, exist_ok=True)

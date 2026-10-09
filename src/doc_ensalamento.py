@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
@@ -36,6 +37,30 @@ def sanitize_text(text):
     for orig, sub in substituicoes.items():
         s = s.replace(orig, sub)
     return s.encode('latin-1', 'replace').decode('latin-1')
+
+
+def obter_data_evento_por_dia(nome_base_arquivo):
+    """Lê o arquivo config_evento.json e retorna a data exata do dia correspondente."""
+    caminho_config = "public/config/config_evento.json"
+    datas_evento = []
+
+    if os.path.exists(caminho_config):
+        try:
+            with open(caminho_config, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                datas_evento = config.get("DATAS_EVENTO", [])
+        except Exception:
+            pass
+
+    if "_dia" in nome_base_arquivo:
+        try:
+            dia_num = int(nome_base_arquivo.split('_dia')[1].split('.')[0])
+            if datas_evento and 1 <= dia_num <= len(datas_evento):
+                return datas_evento[dia_num - 1]
+        except Exception:
+            pass
+
+    return ""
 
 
 def obter_ordem_sessao(sessao_str):
@@ -105,13 +130,7 @@ def pdf_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
     info_area = obter_info_area(nome_area_base, config_areas_df)
 
     nome_area_completo = info_area.get('nome_completo', nome_area_base) if info_area else nome_area_base
-
-    if "_dia1" in nome_base_arquivo:
-        data_do_evento = "27/10/2026"
-    elif "_dia2" in nome_base_arquivo:
-        data_do_evento = "28/10/2026"
-    else:
-        data_do_evento = ""
+    data_do_evento = obter_data_evento_por_dia(nome_base_arquivo)
 
     pdf = PDF('P', 'mm', 'A4', area_name=nome_area_completo, event_date=data_do_evento)
     pdf.add_page()
@@ -138,7 +157,11 @@ def pdf_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
             novo_titulo_sessao = str(nome_sessao)
 
         nome_sala_fisica = obter_nome_fisico(nome_sala_logica, mapa_salas_df)
-        titulo_sala_final = f"SESSÃO {nome_sala_logica} - {str(nome_sala_fisica).upper()}"
+        sala_fisica_str = str(nome_sala_fisica).strip().upper()
+        if not sala_fisica_str.startswith("SALA"):
+            sala_fisica_str = f"SALA {sala_fisica_str}"
+
+        titulo_sala_final = f"SESSÃO {nome_sala_logica} - {sala_fisica_str}"
 
         pdf.set_font(FONTE_PADRAO, 'B', 14)
         pdf.set_fill_color(*COLOR_AZUL_FUNDO)
@@ -266,12 +289,7 @@ def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
     else:
         nome_area_completo = nome_area_completo.upper()
 
-    if "_dia1" in nome_base_arquivo:
-        data_do_evento = "27/10/2026"
-    elif "_dia2" in nome_base_arquivo:
-        data_do_evento = "28/10/2026"
-    else:
-        data_do_evento = ""
+    data_do_evento = obter_data_evento_por_dia(nome_base_arquivo)
 
     doc = Document()
 
@@ -329,7 +347,11 @@ def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
             novo_titulo_sessao = str(nome_sessao)
 
         nome_sala_fisica = obter_nome_fisico(nome_sala_logica, mapa_salas_df)
-        titulo_sala_final = f"SESSÃO {nome_sala_logica} - {str(nome_sala_fisica).upper()}"
+        sala_fisica_str = str(nome_sala_fisica).strip().upper()
+        if not sala_fisica_str.startswith("SALA"):
+            sala_fisica_str = f"SALA {sala_fisica_str}"
+
+        titulo_sala_final = f"SESSÃO {nome_sala_logica} - {sala_fisica_str}"
 
         # 2. Banner de Título Sem Bordas Externas
         banner_table = doc.add_table(rows=1, cols=1)
@@ -377,7 +399,7 @@ def word_ensalamento(caminho_csv, config_areas_df, mapa_salas_df):
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         _set_table_borders(table, HEX_BORDA_CINZA)
 
-        # Proporção idêntica de colunas ao PDF (22mm, 40mm, 40mm, 88mm -> ~1:1.8:1.8:4.0 em polegadas)
+        # Proporção idêntica de colunas ao PDF
         widths = [Inches(0.9), Inches(1.65), Inches(1.65), Inches(3.0)]
 
         # Cabeçalho da Tabela

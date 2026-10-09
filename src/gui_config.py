@@ -19,7 +19,7 @@ class JanelaConfig(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Assistente de Configuração do Evento")
-        self.geometry("980x640")
+        self.geometry("980x680")
 
         if not os.path.exists(PASTA_CONFIG):
             os.makedirs(PASTA_CONFIG, exist_ok=True)
@@ -122,8 +122,7 @@ class JanelaConfig(tk.Toplevel):
 
         caminho_var = tk.StringVar(value="Nenhum arquivo selecionado.")
         ttk.Label(dialog, text="Arquivo Base:").grid(row=4, column=0, padx=10, pady=5, sticky="w")
-        ttk.Label(dialog, textvariable=caminho_var, relief="sunken", width=40).grid(row=4, column=1, padx=5, pady=5,
-                                                                                    sticky="ew")
+        ttk.Label(dialog, textvariable=caminho_var, relief="sunken", width=40).grid(row=4, column=1, padx=5, pady=5, sticky="ew")
 
         ttk.Button(
             dialog,
@@ -203,8 +202,7 @@ class JanelaConfig(tk.Toplevel):
         caminho_var = tk.StringVar(value=caminho_inicial if caminho_inicial else "Nenhum arquivo selecionado.")
 
         ttk.Label(dialog, text="Arquivo Base:").grid(row=4, column=0, padx=10, pady=5, sticky="w")
-        ttk.Label(dialog, textvariable=caminho_var, relief="sunken", width=40).grid(row=4, column=1, padx=5, pady=5,
-                                                                                    sticky="ew")
+        ttk.Label(dialog, textvariable=caminho_var, relief="sunken", width=40).grid(row=4, column=1, padx=5, pady=5, sticky="ew")
 
         ttk.Button(
             dialog,
@@ -243,8 +241,7 @@ class JanelaConfig(tk.Toplevel):
             except Exception as e:
                 messagebox.showerror("Erro", f"Não foi possível salvar:\n{e}", parent=self)
 
-        ttk.Button(dialog, text="Salvar Alterações", command=salvar_edicao).grid(row=len(labels_map) + 1, column=0,
-                                                                                 columnspan=3, pady=10)
+        ttk.Button(dialog, text="Salvar Alterações", command=salvar_edicao).grid(row=len(labels_map) + 1, column=0, columnspan=3, pady=10)
 
     def _selecionar_e_copiar_arquivo(self, caminho_var, parent_dialog):
         caminho_origem = filedialog.askopenfilename(
@@ -261,8 +258,7 @@ class JanelaConfig(tk.Toplevel):
         try:
             shutil.copy(caminho_origem, caminho_destino)
             caminho_var.set(caminho_destino)
-            messagebox.showinfo("Sucesso", f"Arquivo '{nome_arquivo}' copiado para a pasta '{PASTA_PUBLICA}'.",
-                                parent=parent_dialog)
+            messagebox.showinfo("Sucesso", f"Arquivo '{nome_arquivo}' copiado para a pasta '{PASTA_PUBLICA}'.", parent=parent_dialog)
         except Exception as e:
             messagebox.showerror("Erro ao Copiar", f"Não foi possível copiar o arquivo:\n{e}", parent=parent_dialog)
 
@@ -275,8 +271,7 @@ class JanelaConfig(tk.Toplevel):
         valores = self.tree_areas.item(selecionado, 'values')
         nome_base_para_excluir = valores[0]
 
-        if messagebox.askyesno("Confirmar", f"Tem certeza que deseja excluir a área '{nome_base_para_excluir}'?",
-                               parent=self):
+        if messagebox.askyesno("Confirmar", f"Tem certeza que deseja excluir a área '{nome_base_para_excluir}'?", parent=self):
             try:
                 df = pd.read_csv(ARQUIVO_AREAS, encoding="utf-8-sig")
                 df = df[df.nome_base != nome_base_para_excluir]
@@ -319,8 +314,7 @@ class JanelaConfig(tk.Toplevel):
             self.tree_salas.delete(i)
         try:
             if not os.path.exists(ARQUIVO_MAPA):
-                pd.DataFrame(columns=["codigo_logico", "nome_fisico"]).to_csv(ARQUIVO_MAPA, index=False,
-                                                                              encoding="utf-8-sig")
+                pd.DataFrame(columns=["codigo_logico", "nome_fisico"]).to_csv(ARQUIVO_MAPA, index=False, encoding="utf-8-sig")
                 return
 
             df = pd.read_csv(ARQUIVO_MAPA, encoding="utf-8-sig").fillna('')
@@ -384,6 +378,11 @@ class JanelaConfig(tk.Toplevel):
             self.regras_vars[regra] = var
             ttk.Entry(regras_num_frame, textvariable=var, width=12).grid(row=i, column=1, padx=5, pady=4, sticky="w")
 
+        # CAMPO DE DATAS DO EVENTO
+        ttk.Label(regras_num_frame, text="DATAS_EVENTO (ex: 27/10/2026, 28/10/2026):").grid(row=len(regras_para_exibir), column=0, padx=5, pady=4, sticky="w")
+        self.var_datas_evento = tk.StringVar()
+        ttk.Entry(regras_num_frame, textvariable=self.var_datas_evento, width=40).grid(row=len(regras_para_exibir), column=1, padx=5, pady=4, sticky="w")
+
         ignorar_frame = ttk.LabelFrame(frame, text="Arquivos com Nomes a Ignorar")
         ignorar_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -401,12 +400,9 @@ class JanelaConfig(tk.Toplevel):
         btn_regras_frame = ttk.Frame(frame)
         btn_regras_frame.pack(fill="x", padx=10, pady=10)
 
-        ttk.Button(btn_regras_frame, text="Adicionar Arquivo", command=self.adicionar_regra_ignorar).pack(side="left",
-                                                                                                          padx=5)
-        ttk.Button(btn_regras_frame, text="Remover Selecionado", command=self.remover_regra_ignorar).pack(side="left",
-                                                                                                          padx=5)
-        ttk.Button(btn_regras_frame, text="Salvar Todas as Regras", command=self.salvar_regras).pack(side="right",
-                                                                                                     padx=5)
+        ttk.Button(btn_regras_frame, text="Adicionar Arquivo", command=self.adicionar_regra_ignorar).pack(side="left", padx=5)
+        ttk.Button(btn_regras_frame, text="Remover Selecionado", command=self.remover_regra_ignorar).pack(side="left", padx=5)
+        ttk.Button(btn_regras_frame, text="Salvar Todas as Regras", command=self.salvar_regras).pack(side="right", padx=5)
 
         self.carregar_dados_regras()
 
@@ -416,6 +412,7 @@ class JanelaConfig(tk.Toplevel):
                 self.config_evento_data = {
                     "ARQUIVOS_A_IGNORAR": {"GLOBAL": []},
                     "DIAS_EVENTO": 2,
+                    "DATAS_EVENTO": ["27/10/2026", "28/10/2026"],
                     "MAX_TRABALHOS_ORIENTADOR_SESSAO": 3,
                     "MIN_TRABALHOS_SESSAO": 4
                 }
@@ -425,6 +422,9 @@ class JanelaConfig(tk.Toplevel):
 
             for chave, var in self.regras_vars.items():
                 var.set(str(self.config_evento_data.get(chave, "")))
+
+            datas_lst = self.config_evento_data.get("DATAS_EVENTO", ["27/10/2026", "28/10/2026"])
+            self.var_datas_evento.set(", ".join(datas_lst))
 
             for i in self.tree_ignorar.get_children():
                 self.tree_ignorar.delete(i)
@@ -453,8 +453,7 @@ class JanelaConfig(tk.Toplevel):
 
         caminho_normalizado = caminho.strip().replace("\\", "/")
         self.tree_ignorar.insert("", "end", values=(escopo, caminho_normalizado))
-        messagebox.showinfo("Sucesso", "Regra adicionada. Clique em 'Salvar Todas as Regras' para confirmar.",
-                            parent=self)
+        messagebox.showinfo("Sucesso", "Regra adicionada. Clique em 'Salvar Todas as Regras' para confirmar.", parent=self)
 
     def remover_regra_ignorar(self):
         selecionado = self.tree_ignorar.focus()
@@ -463,18 +462,20 @@ class JanelaConfig(tk.Toplevel):
             return
 
         self.tree_ignorar.delete(selecionado)
-        messagebox.showinfo("Sucesso", "Regra removida. Clique em 'Salvar Todas as Regras' para confirmar.",
-                            parent=self)
+        messagebox.showinfo("Sucesso", "Regra removida. Clique em 'Salvar Todas as Regras' para confirmar.", parent=self)
 
     def salvar_regras(self):
         try:
             for chave, var in self.regras_vars.items():
                 valor_str = var.get().strip()
                 if not valor_str.isdigit():
-                    messagebox.showerror("Erro de Validação", f"O valor para '{chave}' deve ser um número inteiro.",
-                                         parent=self)
+                    messagebox.showerror("Erro de Validação", f"O valor para '{chave}' deve ser um número inteiro.", parent=self)
                     return
                 self.config_evento_data[chave] = int(valor_str)
+
+            raw_datas = self.var_datas_evento.get().split(',')
+            datas_limpas = [d.strip() for d in raw_datas if d.strip()]
+            self.config_evento_data["DATAS_EVENTO"] = datas_limpas
 
             novas_regras_ignorar = {}
             for item_id in self.tree_ignorar.get_children():

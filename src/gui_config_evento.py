@@ -161,21 +161,25 @@ class JanelaConfig(tk.Toplevel):
         main_regras = tk.Frame(self.aba_regras, padx=10, pady=10)
         main_regras.pack(fill=tk.BOTH, expand=True)
 
-        # Regras Globais
+        # Parâmetros Globais do Evento
         f_globais = ttk.LabelFrame(main_regras, text="Parâmetros Globais do Evento")
         f_globais.pack(fill=tk.X, pady=5)
 
         tk.Label(f_globais, text="Dias do Evento:").grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        self.spin_dias = ttk.Spinbox(f_globais, from_=1, to=10, width=8)
+        self.spin_dias = ttk.Spinbox(f_globais, from_=1, to=10, width=6)
         self.spin_dias.grid(row=0, column=1, padx=5, pady=5)
 
-        tk.Label(f_globais, text="Mínimo Trabalhos/Sessão:").grid(row=0, column=2, padx=5, pady=5, sticky='w')
-        self.spin_min = ttk.Spinbox(f_globais, from_=1, to=20, width=8)
-        self.spin_min.grid(row=0, column=3, padx=5, pady=5)
+        tk.Label(f_globais, text="Datas do Evento (separadas por vírgula):").grid(row=0, column=2, padx=5, pady=5, sticky='w')
+        self.ent_datas_evento = ttk.Entry(f_globais, width=30)
+        self.ent_datas_evento.grid(row=0, column=3, padx=5, pady=5)
 
-        tk.Label(f_globais, text="Máximo Trabalhos por Orientador/Sessão:").grid(row=0, column=4, padx=5, pady=5, sticky='w')
-        self.spin_max = ttk.Spinbox(f_globais, from_=1, to=30, width=8)
-        self.spin_max.grid(row=0, column=5, padx=5, pady=5)
+        tk.Label(f_globais, text="Mínimo Trabalhos/Sessão:").grid(row=1, column=0, padx=5, pady=5, sticky='w')
+        self.spin_min = ttk.Spinbox(f_globais, from_=1, to=20, width=6)
+        self.spin_min.grid(row=1, column=1, padx=5, pady=5)
+
+        tk.Label(f_globais, text="Máximo Trabalhos por Orientador/Sessão:").grid(row=1, column=2, padx=5, pady=5, sticky='w')
+        self.spin_max = ttk.Spinbox(f_globais, from_=1, to=30, width=6)
+        self.spin_max.grid(row=1, column=3, padx=5, pady=5)
 
         # Tabela de Arquivos a Ignorar
         f_ignorar = ttk.LabelFrame(main_regras, text="Regras de Arquivos a Ignorar")
@@ -207,12 +211,11 @@ class JanelaConfig(tk.Toplevel):
     def carregar_preset_padrao(self):
         confirm = messagebox.askyesno(
             "Carregar Predefinições",
-            "Isso substituirá as tabelas atuais com a configuração padrão do EAIC (Engenharias, Exatas, Biológicas, etc.). Deseja continuar?"
+            "Isso substituirá as tabelas atuais com a configuração padrão do EAIC. Deseja continuar?"
         )
         if not confirm:
             return
 
-        # 1. Preset Áreas
         areas_data = [
             {"nome_base": "ENGENHARIAS", "codigo_area": "EN", "num_salas": 4, "nome_completo": "ENGENHARIAS - EAIC", "caminho_arquivo_base": "public/engenharias.xlsx"},
             {"nome_base": "EXATAS", "codigo_area": "EX", "num_salas": 4, "nome_completo": "EXATAS E DA TERRA - EAIC", "caminho_arquivo_base": "public/exatas.xlsx"},
@@ -227,7 +230,6 @@ class JanelaConfig(tk.Toplevel):
         for a in areas_data:
             self.tree_areas.insert('', tk.END, values=(a['nome_base'], a['codigo_area'], a['num_salas'], a['nome_completo'], a['caminho_arquivo_base']))
 
-        # 2. Preset Mapa de Salas
         mapa_data = []
         for a in areas_data:
             for i in range(1, a['num_salas'] + 1):
@@ -237,7 +239,6 @@ class JanelaConfig(tk.Toplevel):
         for m in mapa_data:
             self.tree_mapa.insert('', tk.END, values=(m['codigo_logico'], m['nome_fisico']))
 
-        # 3. Preset Horários
         sessoes_padrao = [
             {"nome_sessao": "Manhã 1", "horario_inicio": "08:30", "capacidade": 6},
             {"nome_sessao": "Manhã 2", "horario_inicio": "10:30", "capacidade": 6},
@@ -250,18 +251,19 @@ class JanelaConfig(tk.Toplevel):
                 for s in sessoes_padrao:
                     self.tree_horarios.insert('', tk.END, values=(dia, m['nome_fisico'], s['nome_sessao'], s['horario_inicio'], s['capacidade']))
 
-        # 4. Preset Regras Globais
         self.spin_dias.set(2)
+        self.ent_datas_evento.delete(0, tk.END)
+        self.ent_datas_evento.insert(0, "27/10/2026, 28/10/2026")
         self.spin_min.set(4)
         self.spin_max.set(6)
 
         self.tree_ignorar.delete(*self.tree_ignorar.get_children())
         self.tree_ignorar.insert('', tk.END, values=("GLOBAL", "public/PIBIC_Jr.xlsx"))
 
-        messagebox.showinfo("Predefinições Carregadas", "As predefinições padrão foram carregadas nas tabelas! Clique em 'Salvar Todas as Alterações' para gravar os arquivos.")
+        messagebox.showinfo("Predefinições Carregadas", "As predefinições padrão foram carregadas! Clique em 'Salvar Todas as Alterações' para gravar.")
 
     # =========================================================================
-    # INSERÇÃO E REQUISITOS DAS TABELAS
+    # INSERÇÃO NAS TABELAS
     # =========================================================================
 
     def add_area(self):
@@ -305,7 +307,6 @@ class JanelaConfig(tk.Toplevel):
     # =========================================================================
 
     def carregar_dados_existentes(self):
-        # Carrega Áreas
         if os.path.exists(ARQUIVO_AREAS):
             try:
                 df = pd.read_csv(ARQUIVO_AREAS)
@@ -314,17 +315,17 @@ class JanelaConfig(tk.Toplevel):
                         r.get('nome_base', ''), r.get('codigo_area', ''), r.get('num_salas', ''),
                         r.get('nome_completo', ''), r.get('caminho_arquivo_base', '')
                     ))
-            except Exception: pass
+            except Exception:
+                pass
 
-        # Carrega Mapa
         if os.path.exists(ARQUIVO_MAPA):
             try:
                 df = pd.read_csv(ARQUIVO_MAPA)
                 for _, r in df.iterrows():
                     self.tree_mapa.insert('', tk.END, values=(r.get('codigo_logico', ''), r.get('nome_fisico', '')))
-            except Exception: pass
+            except Exception:
+                pass
 
-        # Carrega Horários
         if os.path.exists(ARQUIVO_HORARIOS):
             try:
                 df = pd.read_csv(ARQUIVO_HORARIOS)
@@ -333,14 +334,19 @@ class JanelaConfig(tk.Toplevel):
                         r.get('dia', ''), r.get('sala_fisica', ''), r.get('nome_sessao', ''),
                         r.get('horario_inicio', ''), r.get('capacidade', '')
                     ))
-            except Exception: pass
+            except Exception:
+                pass
 
-        # Carrega Evento JSON
         if os.path.exists(ARQUIVO_EVENTO):
             try:
                 with open(ARQUIVO_EVENTO, 'r', encoding='utf-8') as f:
                     cfg = json.load(f)
                     self.spin_dias.set(cfg.get('DIAS_EVENTO', 2))
+
+                    datas_lst = cfg.get('DATAS_EVENTO', ["27/10/2026", "28/10/2026"])
+                    self.ent_datas_evento.delete(0, tk.END)
+                    self.ent_datas_evento.insert(0, ", ".join(datas_lst))
+
                     self.spin_min.set(cfg.get('MIN_TRABALHOS_SESSAO', 4))
                     self.spin_max.set(cfg.get('MAX_TRABALHOS_ORIENTADOR_SESSAO', 6))
 
@@ -348,11 +354,11 @@ class JanelaConfig(tk.Toplevel):
                     for escopo, lista in ignorar.items():
                         for item in lista:
                             self.tree_ignorar.insert('', tk.END, values=(escopo, item))
-            except Exception: pass
+            except Exception:
+                pass
 
     def salvar_tudo(self):
         try:
-            # 1. Salva Áreas
             list_areas = []
             for item in self.tree_areas.get_children():
                 v = self.tree_areas.item(item)['values']
@@ -362,14 +368,12 @@ class JanelaConfig(tk.Toplevel):
                 })
             pd.DataFrame(list_areas).to_csv(ARQUIVO_AREAS, index=False)
 
-            # 2. Salva Mapa
             list_mapa = []
             for item in self.tree_mapa.get_children():
                 v = self.tree_mapa.item(item)['values']
                 list_mapa.append({'codigo_logico': v[0], 'nome_fisico': v[1]})
             pd.DataFrame(list_mapa).to_csv(ARQUIVO_MAPA, index=False)
 
-            # 3. Salva Horários
             list_horarios = []
             for item in self.tree_horarios.get_children():
                 v = self.tree_horarios.item(item)['values']
@@ -379,7 +383,6 @@ class JanelaConfig(tk.Toplevel):
                 })
             pd.DataFrame(list_horarios).to_csv(ARQUIVO_HORARIOS, index=False)
 
-            # 4. Salva JSON
             dic_ignorar = {}
             for item in self.tree_ignorar.get_children():
                 v = self.tree_ignorar.item(item)['values']
@@ -388,9 +391,13 @@ class JanelaConfig(tk.Toplevel):
                     dic_ignorar[escopo] = []
                 dic_ignorar[escopo].append(caminho)
 
+            raw_datas = self.ent_datas_evento.get().split(',')
+            datas_limpas = [d.strip() for d in raw_datas if d.strip()]
+
             cfg_evento = {
                 "ARQUIVOS_A_IGNORAR": dic_ignorar,
                 "DIAS_EVENTO": int(self.spin_dias.get()),
+                "DATAS_EVENTO": datas_limpas,
                 "MIN_TRABALHOS_SESSAO": int(self.spin_min.get()),
                 "MAX_TRABALHOS_ORIENTADOR_SESSAO": int(self.spin_max.get())
             }
@@ -398,7 +405,7 @@ class JanelaConfig(tk.Toplevel):
             with open(ARQUIVO_EVENTO, 'w', encoding='utf-8') as f:
                 json.dump(cfg_evento, f, indent=4, ensure_ascii=False)
 
-            messagebox.showinfo("Sucesso", "Todas as configurações foram salvas com sucesso no diretório 'public/config'!")
+            messagebox.showinfo("Sucesso", "Todas as configurações foram salvas com sucesso!")
             self.destroy()
 
         except Exception as e:
